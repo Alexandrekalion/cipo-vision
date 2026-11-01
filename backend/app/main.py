@@ -2,21 +2,11 @@ from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.orm import Session
 from .auth import current_user, require_roles
-from .db import Base, engine, get_db
+from .db import get_db
 from .models import AuditEvent, Request, Signature, User
 from .schemas import Decision, DevLogin, RequestCreate, RequestOut, Token
 
 app = FastAPI(title="CIPO VISION API", version="0.1.0", description="API de desenvolvimento isolada; sem AD, NAS ou câmeras reais.")
-Base.metadata.create_all(bind=engine)
-
-def seed_development_users():
-    db = next(get_db())
-    if db.query(User).count() == 0:
-        db.add_all([User(username='carlos', display_name='Carlos Mendes', role='Gestor solicitante'), User(username='giuliano', display_name='Giuliano', role='Gerente aprovador'), User(username='ti', display_name='TI Demonstrativo', role='TI'), User(username='rh', display_name='RH Demonstrativo', role='RH')])
-        db.commit()
-    db.close()
-
-seed_development_users()
 
 @app.post('/auth/dev-login', response_model=Token)
 def dev_login(payload: DevLogin, db: Session = Depends(get_db)):

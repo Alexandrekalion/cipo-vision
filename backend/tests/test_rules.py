@@ -1,7 +1,13 @@
 import os
 os.environ['DATABASE_URL']='sqlite://'
+from app.db import Base, engine
+from app import models
+Base.metadata.create_all(engine)
 from fastapi.testclient import TestClient
 from app.main import app
+from app.models import User
+from app.db import SessionLocal
+db = SessionLocal(); db.add(User(username='giuliano', display_name='Giuliano', role='Gerente aprovador')); db.commit(); db.close()
 
 client=TestClient(app)
 
