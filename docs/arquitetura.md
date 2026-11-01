@@ -37,6 +37,14 @@ O frontend apresenta o estado atual e as ações permitidas para cada perfil. A 
 
 Não haverá conexão com câmeras ao vivo nesta fase; qualquer integração com fontes de gravação será tratada posteriormente pela API externa, mediante especificação e autorização.
 
+## Regras de autorização
+
+O frontend exibirá somente dados demonstrativos e estados locais nesta fase. Em produção, a API deverá validar perfil, vínculo com a solicitação, etapa, assinatura obrigatória, retenção e permissão de download. Ocultar controles no frontend nunca será considerado controle de segurança.
+
+## Substitutos
+
+Delegações serão entidades temporais e auditáveis, com titular, substituto, escopo, validade e autorizador. A API deverá impedir ciclos de autoautorização e elevação de privilégios.
+
 ## Alternativas
 
 React/Vite foi escolhido por simplicidade e ecossistema. Next.js pode ser avaliado se SSR ou roteamento no servidor forem requisitos; não é necessário adotá-lo sem essa demanda.

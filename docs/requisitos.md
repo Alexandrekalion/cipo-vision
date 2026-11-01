@@ -59,7 +59,15 @@ Estados auxiliares: `DEVOLVIDA_PARA_CORRECAO`, `CANCELADA` e `ERRO_DE_EXTRACAO`.
 - Segredos fora do Git e arquivos `.env` reais fora do repositório.
 - Retenção e acesso às gravações definidos por política corporativa.
 
-## Pontos para aprovação
+## Decisões aprovadas — Fase 2.1
+
+- Assinaturas configuráveis por tipo de ocorrência e etapa; não presumir RH ou testemunhas em todos os casos.
+- Retenção configurável por categoria, sujeita à política corporativa, preservação legal e bloqueio de descarte. Nenhuma exclusão automática nesta fase.
+- Downloads somente para TI com permissão específica; API deve autorizar e auditar sucessos e negativas.
+- Active Directory somente para autenticação futura; perfis e permissões permanecem internos ao CIPO VISION. Senhas do AD não serão armazenadas.
+- Substitutos com titular, período, permissões delegadas e autorizador; substituto não pode autoelevar privilégios e todas as ações serão auditadas.
+
+## Pontos ainda pendentes
 
 - Quais assinaturas são obrigatórias em cada tipo de ocorrência.
 - Prazo de retenção e destino final das gravações.
