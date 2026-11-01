@@ -1,0 +1,49 @@
+from datetime import datetime, timezone
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from .db import Base
+
+def now(): return datetime.now(timezone.utc)
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(160))
+    role: Mapped[str] = mapped_column(String(80))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+class Request(Base):
+    __tablename__ = "requests"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    protocol: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    requester_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    manager_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(80), default="RASCUNHO")
+    employee: Mapped[str] = mapped_column(String(160))
+    occurrence_type: Mapped[str] = mapped_column(String(120))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    location: Mapped[str] = mapped_column(String(200))
+    camera_area: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    reason: Mapped[str] = mapped_column(Text)
+    rh_required: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    witness_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class Signature(Base):
+    __tablename__ = "signatures"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    kind: Mapped[str] = mapped_column(String(80))
+    document_version: Mapped[str] = mapped_column(String(40), default="v1")
+    confirmed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int | None] = mapped_column(ForeignKey("requests.id"), nullable=True)
+    actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    action: Mapped[str] = mapped_column(String(120))
+    detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

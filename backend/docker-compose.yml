@@ -1,0 +1,13 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cipo_vision_dev
+      POSTGRES_USER: cipo_vision_dev
+      POSTGRES_PASSWORD: change-me-local-only
+    ports:
+      - "55432:5432"
+    volumes:
+      - cipo_vision_pgdata:/var/lib/postgresql/data
+volumes:
+  cipo_vision_pgdata:
