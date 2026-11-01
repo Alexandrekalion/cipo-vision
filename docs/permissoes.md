@@ -11,3 +11,8 @@
 | Administrar perfis | Não | Não | Não | Não | Não | Sim |
 
 Esta matriz é regra aprovada de alto nível; a API será a autoridade final.
+# Regra oficial de testemunha — Fase 2.3
+
+O gerente aprovador (Giuliano, Luiz Paulo ou Zefi, associados a contas configuráveis) é o único perfil autorizado a indicar a testemunha obrigatória. A aprovação exige assinatura do gerente, testemunha indicada e decisão explícita sobre participação do RH. A testemunha e Segurança do Trabalho assinam todas as solicitações aprovadas; RH assina quando indicado.
+
+Somente após todas as assinaturas obrigatórias a API permite a fila de extração da TI. Indicações, substituições e confirmações são auditadas com usuário, data, motivo e versão do documento.

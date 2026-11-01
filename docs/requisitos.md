@@ -69,6 +69,14 @@ Estados auxiliares: `DEVOLVIDA_PARA_CORRECAO`, `CANCELADA` e `ERRO_DE_EXTRACAO`.
 
 ## Pontos ainda pendentes
 
+## Decisão oficial — testemunha obrigatória (Fase 2.3)
+
+- O gerente aprovador é o único responsável por indicar a testemunha, escolhida entre usuários autorizados.
+- Toda aprovação exige assinatura do gerente, indicação da testemunha e decisão explícita sobre o RH.
+- Toda solicitação aprovada exige assinatura da testemunha e da Segurança do Trabalho; RH assina quando indicado pelo gerente.
+- A API deve bloquear a fila de extração enquanto houver assinatura obrigatória pendente.
+- Indicações, substituições e confirmações de assinatura devem ser auditadas com autor, data, motivo e versão do documento.
+
 - Quais assinaturas são obrigatórias em cada tipo de ocorrência.
 - Prazo de retenção e destino final das gravações.
 - Regras para download, expiração e revogação de acesso.
