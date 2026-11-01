@@ -29,7 +29,7 @@ export default function App() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><div className="brand-mark">CV</div><div><strong>CIPO VISION</strong><small>Gestão de ocorrências</small></div></div>
+      <div className="brand"><div className="brand-logo-wrap"><img className="brand-logo" src="/brand/logo-cipolatti.png" alt="Cipolatti" /></div><div><strong>CIPO VISION</strong><small>Gestão de ocorrências</small></div></div>
       <nav>{navItems.map(([key, label, Icon]) => <button className={active === key ? 'nav-item active' : 'nav-item'} onClick={() => setActive(key)} key={key}><Icon size={18}/><span>{label}</span>{key === 'approvals' && <b className="nav-count">3</b>}</button>)}</nav>
       <div className="sidebar-bottom"><button className="nav-item" onClick={() => setActive('settings')}><Settings size={18}/><span>Configurações</span></button><div className="user-card"><div className="avatar">CM</div><div><strong>Carlos Mendes</strong><small>Encarregado</small></div><span className="online"/></div></div>
     </aside>
