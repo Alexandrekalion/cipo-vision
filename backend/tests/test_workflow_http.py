@@ -88,3 +88,12 @@ def test_required_csrf_and_rh_conditional_rule():
     rh, rh_csrf = login("rh")
     assert rh.post(f"/requests/{request_id}/sign", headers={"X-CSRF-Token":rh_csrf}, json={"purpose":"RH", "document_hash":"h", "confirmed":True}).status_code == 200
 
+def test_manager_return_requires_reason_and_requester_can_resubmit():
+    ids = seed_users(); requester, requester_csrf = login("requester"); request_id = create_request(requester, requester_csrf, ids["manager"])
+    manager, manager_csrf = login("manager")
+    assert manager.post(f"/requests/{request_id}/decision", headers={"X-CSRF-Token":manager_csrf}, json={"decision":"RETURN"}).status_code == 422
+    returned = manager.post(f"/requests/{request_id}/decision", headers={"X-CSRF-Token":manager_csrf}, json={"decision":"RETURN", "reason":"Corrigir local da ocorrência"})
+    assert returned.status_code == 200 and returned.json()["status"] == "DEVOLVIDA_PARA_CORRECAO"
+    resent = requester.post(f"/requests/{request_id}/resubmit", headers={"X-CSRF-Token":requester_csrf}, json={"employee":"Colaborador corrigido", "occurrence_type":"Teste", "occurred_at":"2026-11-02T10:00:00Z", "location":"Local corrigido", "camera_area":"C02", "reason":"Motivo corrigido"})
+    assert resent.status_code == 200 and resent.json()["status"] == "RASCUNHO"
+

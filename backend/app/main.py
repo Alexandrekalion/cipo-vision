@@ -7,7 +7,7 @@ from .auth import current_user as dev_current_user, require_roles as dev_require
 from .security import SESSION_COOKIE, create_session, current_session, current_user, hash_password, require_csrf, require_roles, verify_password
 from .db import get_db
 from .models import AuditEvent, Extraction, Request, Signature, User, UserCredential, UserSignature, WorkflowEvent
-from .schemas import Decision, DevLogin, ExtractionCreate, LoginPayload, RequestCreate, RequestOut, SignatureCreate, SignatureOut, Token, UserSignatureOut, UserSignaturePayload
+from .schemas import Decision, DevLogin, ExtractionCreate, LoginPayload, RequestCorrection, RequestCreate, RequestOut, SignatureCreate, SignatureOut, Token, UserSignatureOut, UserSignaturePayload
 
 app = FastAPI(title="CIPO VISION API", version="0.1.0", description="API de desenvolvimento isolada; sem AD, NAS ou câmeras reais.")
 
@@ -95,6 +95,16 @@ def decide(request_id:int,payload:Decision,db:Session=Depends(get_db),user:User=
         item.status='DEVOLVIDA_PARA_CORRECAO'
     else: raise HTTPException(422,'Decisão inválida')
     db.add(AuditEvent(request_id=item.id,actor_id=user.id,action=f'DECISION_{payload.decision}',detail=payload.reason or '')); db.add(WorkflowEvent(request_id=item.id, actor_id=user.id, from_status='RASCUNHO', to_status=item.status, detail=payload.reason or '')); db.commit();db.refresh(item);return item
+
+@app.post('/requests/{request_id}/resubmit', response_model=RequestOut)
+def resubmit_request(request_id: int, payload: RequestCorrection, db: Session = Depends(get_db), user: User = Depends(require_roles('Gestor solicitante')), csrf=Depends(require_csrf)):
+    item = db.query(Request).with_for_update().filter(Request.id == request_id, Request.requester_id == user.id).first()
+    if not item or item.status != 'DEVOLVIDA_PARA_CORRECAO': raise HTTPException(409, 'Solicitação não pode ser reenviada neste estado')
+    item.employee=payload.employee; item.occurrence_type=payload.occurrence_type; item.occurred_at=payload.occurred_at; item.location=payload.location; item.camera_area=payload.camera_area; item.reason=payload.reason; item.status='RASCUNHO'; item.witness_id=None; item.rh_required=None
+    db.query(Signature).filter(Signature.request_id == request_id).delete(synchronize_session=False)
+    db.add(AuditEvent(request_id=request_id, actor_id=user.id, action='REQUEST_RESUBMITTED', detail='Assinaturas anteriores invalidadas pela correção'))
+    db.add(WorkflowEvent(request_id=request_id, actor_id=user.id, from_status='DEVOLVIDA_PARA_CORRECAO', to_status='RASCUNHO', detail='Correção reenviada'))
+    db.commit(); db.refresh(item); return item
 
 @app.post('/requests/{request_id}/sign', response_model=SignatureOut)
 def sign_request(request_id: int, payload: SignatureCreate, db: Session = Depends(get_db), user: User = Depends(current_user), csrf=Depends(require_csrf)):
