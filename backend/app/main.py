@@ -36,7 +36,7 @@ def dev_login(payload: DevLogin, db: Session = Depends(get_db)):
     return Token(access_token=f"dev-{user.username}")
 
 @app.post('/requests', response_model=RequestOut)
-def create_request(payload: RequestCreate, db: Session = Depends(get_db), user: User = Depends(require_roles('Gestor solicitante'))):
+def create_request(payload: RequestCreate, db: Session = Depends(get_db), user: User = Depends(require_roles('Gestor solicitante')), csrf=Depends(require_csrf)):
     item = Request(protocol=f"CV-DEV-{int(datetime.now().timestamp())}", requester_id=user.id, manager_id=payload.manager_id, status='RASCUNHO', employee=payload.employee, occurrence_type=payload.occurrence_type, occurred_at=payload.occurred_at, location=payload.location, camera_area=payload.camera_area, reason=payload.reason)
     db.add(item); db.flush(); db.add(AuditEvent(request_id=item.id, actor_id=user.id, action='REQUEST_CREATED')); db.add(WorkflowEvent(request_id=item.id, actor_id=user.id, to_status='RASCUNHO')); db.commit(); db.refresh(item); return item
 
@@ -47,9 +47,10 @@ def list_requests(db: Session = Depends(get_db), user: User = Depends(current_us
     return query.all()
 
 @app.post('/requests/{request_id}/decision', response_model=RequestOut)
-def decide(request_id:int,payload:Decision,db:Session=Depends(get_db),user:User=Depends(require_roles('Gerente aprovador'))):
+def decide(request_id:int,payload:Decision,db:Session=Depends(get_db),user:User=Depends(require_roles('Gerente aprovador')), csrf=Depends(require_csrf)):
     item=db.get(Request,request_id)
     if not item or item.manager_id!=user.id: raise HTTPException(404,'Solicitação não encontrada')
+    if item.status != 'RASCUNHO': raise HTTPException(409, 'Decisão gerencial já realizada ou solicitação fora da etapa')
     if payload.decision=='APPROVE':
         if not payload.manager_signature or not payload.witness_id or payload.rh_required is None: raise HTTPException(422,'Assinatura, testemunha e decisão de RH são obrigatórias')
         witness = db.get(User, payload.witness_id)
@@ -67,9 +68,15 @@ def decide(request_id:int,payload:Decision,db:Session=Depends(get_db),user:User=
 def sign_request(request_id: int, payload: SignatureCreate, db: Session = Depends(get_db), user: User = Depends(current_user), csrf=Depends(require_csrf)):
     item = db.get(Request, request_id)
     if not item or not payload.confirmed or not payload.document_hash: raise HTTPException(422, 'Confirmação e integridade do documento são obrigatórias')
+    if item.status not in ('RASCUNHO', 'AGUARDANDO_ASSINATURAS'):
+        raise HTTPException(409, 'Solicitação fora da etapa de assinatura')
     allowed = {'SOLICITANTE': ('Gestor solicitante', item.requester_id), 'TESTEMUNHA': ('Testemunha', item.witness_id), 'SEGURANCA': ('Segurança do Trabalho', None), 'RH': ('RH', None)}
     rule = allowed.get(payload.purpose)
     if not rule or user.role != rule[0] or (rule[1] is not None and user.id != rule[1]): raise HTTPException(403, 'Usuário não autorizado para esta assinatura')
+    if payload.purpose == 'RH' and not item.rh_required:
+        raise HTTPException(409, 'RH não foi exigido pelo gerente')
+    if payload.purpose == 'GERENTE':
+        raise HTTPException(403, 'A assinatura gerencial ocorre durante a aprovação')
     existing = db.query(Signature).filter_by(request_id=request_id, user_id=user.id, purpose=payload.purpose).first()
     if existing: raise HTTPException(409, 'Assinatura já confirmada')
     sig = Signature(request_id=request_id,user_id=user.id,kind=payload.purpose,purpose=payload.purpose,document_hash=payload.document_hash,confirmed=True)
@@ -98,7 +105,7 @@ def finish_extraction(request_id: int, db: Session = Depends(get_db), user: User
     item.status='FINALIZADA'; extraction.finished_at=datetime.now(timezone.utc); db.add(AuditEvent(request_id=request_id,actor_id=user.id,action='EXTRACTION_FINISHED')); db.commit(); db.refresh(item); return item
 
 @app.post('/requests/{request_id}/extraction', response_model=RequestOut)
-def extraction(request_id:int,db:Session=Depends(get_db),user:User=Depends(require_roles('TI'))):
+def extraction(request_id:int,db:Session=Depends(get_db),user:User=Depends(require_roles('TI')), csrf=Depends(require_csrf)):
     item=db.get(Request,request_id)
     if not item or item.status!='PRONTA_PARA_EXTRACAO': raise HTTPException(409,'Extração bloqueada até concluir assinaturas obrigatórias')
     item.status='EM_EXTRACAO';db.add(AuditEvent(request_id=item.id,actor_id=user.id,action='EXTRACTION_STARTED'));db.commit();db.refresh(item);return item
