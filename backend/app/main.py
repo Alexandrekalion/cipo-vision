@@ -1,15 +1,36 @@
 from datetime import datetime, timezone
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from sqlalchemy.orm import Session
-from .auth import current_user, require_roles
+from .auth import current_user as dev_current_user, require_roles as dev_require_roles
+from .security import SESSION_COOKIE, create_session, current_session, current_user, hash_password, require_csrf, require_roles, verify_password
 from .db import get_db
-from .models import AuditEvent, Request, Signature, User
-from .schemas import Decision, DevLogin, RequestCreate, RequestOut, Token
+from .models import AuditEvent, Request, Signature, User, UserCredential
+from .schemas import Decision, DevLogin, LoginPayload, RequestCreate, RequestOut, Token
 
 app = FastAPI(title="CIPO VISION API", version="0.1.0", description="API de desenvolvimento isolada; sem AD, NAS ou câmeras reais.")
 
+@app.post('/auth/login', response_model=Token)
+def login(payload: LoginPayload, response: Response, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == payload.username, User.active.is_(True)).first()
+    credential = db.get(UserCredential, user.id) if user else None
+    if not user or not credential or not verify_password(payload.password, credential.password_hash):
+        raise HTTPException(401, 'Credenciais inválidas')
+    session = create_session(response, user, db)
+    return Token(access_token=session.csrf_token)
+
+@app.post('/auth/logout')
+def logout(response: Response, session_data=Depends(current_session), csrf=Depends(require_csrf), db: Session = Depends(get_db)):
+    session_data[1].revoked_at = datetime.now(timezone.utc); db.commit(); response.delete_cookie(SESSION_COOKIE)
+    return {'ok': True}
+
+@app.get('/auth/me')
+def me(user: User = Depends(current_user)):
+    return {'id': user.id, 'username': user.username, 'display_name': user.display_name, 'role': user.role}
+
 @app.post('/auth/dev-login', response_model=Token)
 def dev_login(payload: DevLogin, db: Session = Depends(get_db)):
+    from .config import settings
+    if not settings.dev_auth_enabled: raise HTTPException(404, 'Not found')
     user = db.query(User).filter(User.username == payload.username, User.active.is_(True)).first()
     if not user: raise HTTPException(401, "Usuário de desenvolvimento não encontrado")
     return Token(access_token=f"dev-{user.username}")

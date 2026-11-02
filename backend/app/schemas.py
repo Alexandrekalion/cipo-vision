@@ -3,6 +3,7 @@ from pydantic import BaseModel, ConfigDict
 
 class DevLogin(BaseModel): username: str
 class Token(BaseModel): access_token: str; token_type: str = "bearer"
+class LoginPayload(BaseModel): username: str; password: str
 class RequestCreate(BaseModel):
     employee: str; occurrence_type: str; occurred_at: datetime; location: str; camera_area: str | None = None; reason: str; manager_id: int
 class Decision(BaseModel):
