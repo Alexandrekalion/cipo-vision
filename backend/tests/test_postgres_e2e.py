@@ -96,3 +96,27 @@ def test_postgres_duplicate_decision_and_extraction_are_serialized():
         c, csrf = auth("e2e_ti"); return c.post(f"/requests/{rid}/extraction/start", headers={"X-CSRF-Token":csrf}, json={"storage_reference":"e2e://concurrent"}).status_code
     with ThreadPoolExecutor(max_workers=2) as pool: ti_results=list(pool.map(lambda _: start(), [1, 2]))
     assert sorted(ti_results) == [200, 409]
+
+def ready_extraction():
+    ids = seed(); requester, rc = auth("e2e_requester"); rid = create(requester, rc, ids["e2e_manager"]); sign(requester, rc, rid, "SOLICITANTE")
+    manager, mc = auth("e2e_manager"); assert approve(manager, mc, rid, ids["e2e_witness"], False).status_code == 200
+    witness, wc = auth("e2e_witness"); safety, sc = auth("e2e_safety"); sign(witness, wc, rid, "TESTEMUNHA"); sign(safety, sc, rid, "SEGURANCA")
+    ti, tc = auth("e2e_ti"); assert ti.post(f"/requests/{rid}/extraction/start", headers={"X-CSRF-Token":tc}, json={"storage_reference":"e2e://finish"}).status_code == 200
+    return rid
+
+def test_postgres_concurrent_finish_has_one_success_and_one_conflict():
+    rid = ready_extraction()
+    def finish():
+        c, csrf = auth("e2e_ti"); return c.post(f"/requests/{rid}/extraction/finish", headers={"X-CSRF-Token":csrf}).status_code
+    with ThreadPoolExecutor(max_workers=2) as pool: results = list(pool.map(lambda _: finish(), [1, 2]))
+    assert sorted(results) == [200, 409]
+    db = SessionLocal(); assert db.query(Extraction).filter_by(request_id=rid).count() == 1; assert db.get(Request, rid).status == "FINALIZADA"; db.close()
+
+def test_postgres_concurrent_resubmit_has_one_success_and_one_conflict():
+    ids = seed(); requester, rc = auth("e2e_requester"); rid = create(requester, rc, ids["e2e_manager"])
+    manager, mc = auth("e2e_manager"); assert manager.post(f"/requests/{rid}/decision", headers={"X-CSRF-Token":mc}, json={"decision":"RETURN", "reason":"Corrigir dados"}).status_code == 200
+    def resubmit():
+        c, csrf = auth("e2e_requester"); return c.post(f"/requests/{rid}/resubmit", headers={"X-CSRF-Token":csrf}, json={"employee":"Corrigido", "occurrence_type":"E2E", "occurred_at":"2026-11-02T10:00:00Z", "location":"Teste", "camera_area":"C02", "reason":"Corrigido"}).status_code
+    with ThreadPoolExecutor(max_workers=2) as pool: results = list(pool.map(lambda _: resubmit(), [1, 2]))
+    assert sorted(results) == [200, 409]
+    db = SessionLocal(); assert db.get(Request, rid).status == "RASCUNHO"; events = db.query(WorkflowEvent).filter_by(request_id=rid).all(); assert len(events) == 3; assert sum(event.from_status == "DEVOLVIDA_PARA_CORRECAO" and event.to_status == "RASCUNHO" for event in events) == 1; db.close()

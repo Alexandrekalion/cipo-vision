@@ -195,7 +195,7 @@ def start_extraction(request_id: int, payload: ExtractionCreate, db: Session = D
 
 @app.post('/requests/{request_id}/extraction/finish', response_model=RequestOut)
 def finish_extraction(request_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles('TI')), csrf=Depends(require_csrf)):
-    item=db.get(Request,request_id); extraction=db.query(Extraction).filter_by(request_id=request_id).first()
+    item=db.query(Request).with_for_update().filter(Request.id == request_id).first(); extraction=db.query(Extraction).filter_by(request_id=request_id).first()
     if not item or not extraction or item.status != 'EM_EXTRACAO': raise HTTPException(409, 'Extração não está em andamento')
     item.status='FINALIZADA'; extraction.finished_at=datetime.now(timezone.utc); db.add(AuditEvent(request_id=request_id,actor_id=user.id,action='EXTRACTION_FINISHED')); db.commit(); db.refresh(item); return item
 
