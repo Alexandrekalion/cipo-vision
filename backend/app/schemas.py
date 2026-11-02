@@ -20,3 +20,12 @@ class ExtractionCreate(BaseModel):
 class SignatureOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int; request_id: int; user_id: int; kind: str; purpose: str; document_hash: str; confirmed: bool
+
+class UserSignaturePayload(BaseModel):
+    signature_data: str
+
+class UserSignatureOut(BaseModel):
+    user_id: int
+    signature_digest: str
+    created_at: datetime
+    updated_at: datetime

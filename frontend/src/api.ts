@@ -25,6 +25,7 @@ export type AuditItem = { id: number; action: string; detail: string; created_at
 export function requestHistory(id: number) { return call<AuditItem[]>(`/requests/${id}/history`) }
 export type AuthorizedUser = { id: number; username: string; display_name: string; role: string }
 export function authorizedWitnesses() { return call<AuthorizedUser[]>('/users/authorized?role=Testemunha') }
+export function saveSignature(signatureData: string) { return call('/auth/signature', { method: 'PUT', body: JSON.stringify({ signature_data: signatureData }) }) }
 export function signRequest(id: number, purpose: string, documentHash: string) { return call(`/requests/${id}/sign`, { method: 'POST', body: JSON.stringify({ purpose, document_hash: documentHash, confirmed: true }) }) }
 export function decideRequest(id: number, payload: object) { return call<RequestItem>(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify(payload) }) }
 export function startExtraction(id: number, storageReference: string) { return call<RequestItem>(`/requests/${id}/extraction/start`, { method: 'POST', body: JSON.stringify({ storage_reference: storageReference }) }) }

@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
+import hashlib
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from .auth import current_user as dev_current_user, require_roles as dev_require_roles
 from .security import SESSION_COOKIE, create_session, current_session, current_user, hash_password, require_csrf, require_roles, verify_password
 from .db import get_db
-from .models import AuditEvent, Extraction, Request, Signature, User, UserCredential, WorkflowEvent
-from .schemas import Decision, DevLogin, ExtractionCreate, LoginPayload, RequestCreate, RequestOut, SignatureCreate, SignatureOut, Token
+from .models import AuditEvent, Extraction, Request, Signature, User, UserCredential, UserSignature, WorkflowEvent
+from .schemas import Decision, DevLogin, ExtractionCreate, LoginPayload, RequestCreate, RequestOut, SignatureCreate, SignatureOut, Token, UserSignatureOut, UserSignaturePayload
 
 app = FastAPI(title="CIPO VISION API", version="0.1.0", description="API de desenvolvimento isolada; sem AD, NAS ou câmeras reais.")
 
@@ -27,6 +28,24 @@ def logout(response: Response, session_data=Depends(current_session), csrf=Depen
 @app.get('/auth/me')
 def me(user: User = Depends(current_user)):
     return {'id': user.id, 'username': user.username, 'display_name': user.display_name, 'role': user.role}
+
+@app.put('/auth/signature', response_model=UserSignatureOut)
+def save_signature(payload: UserSignaturePayload, db: Session = Depends(get_db), user: User = Depends(current_user), csrf=Depends(require_csrf)):
+    if not payload.signature_data.startswith('data:image/') or len(payload.signature_data) > 500000:
+        raise HTTPException(422, 'Assinatura deve ser uma imagem válida')
+    digest = hashlib.sha256(payload.signature_data.encode()).hexdigest()
+    profile = db.get(UserSignature, user.id)
+    if profile:
+        profile.signature_data = payload.signature_data; profile.signature_digest = digest; profile.updated_at = datetime.now(timezone.utc)
+    else:
+        profile = UserSignature(user_id=user.id, signature_data=payload.signature_data, signature_digest=digest, created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc)); db.add(profile)
+    db.commit(); db.refresh(profile); return profile
+
+@app.get('/auth/signature', response_model=UserSignatureOut)
+def get_signature(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    profile = db.get(UserSignature, user.id)
+    if not profile: raise HTTPException(404, 'Assinatura ainda não cadastrada')
+    return profile
 
 @app.post('/auth/dev-login', response_model=Token)
 def dev_login(payload: DevLogin, db: Session = Depends(get_db)):
@@ -71,7 +90,9 @@ def decide(request_id:int,payload:Decision,db:Session=Depends(get_db),user:User=
     elif payload.decision=='REJECT':
         if not payload.reason: raise HTTPException(422,'Justificativa obrigatória para recusa')
         item.status='RECUSADA'
-    elif payload.decision=='RETURN': item.status='DEVOLVIDA_PARA_CORRECAO'
+    elif payload.decision=='RETURN':
+        if not payload.reason: raise HTTPException(422,'Justificativa obrigatória para devolução')
+        item.status='DEVOLVIDA_PARA_CORRECAO'
     else: raise HTTPException(422,'Decisão inválida')
     db.add(AuditEvent(request_id=item.id,actor_id=user.id,action=f'DECISION_{payload.decision}',detail=payload.reason or '')); db.add(WorkflowEvent(request_id=item.id, actor_id=user.id, from_status='RASCUNHO', to_status=item.status, detail=payload.reason or '')); db.commit();db.refresh(item);return item
 

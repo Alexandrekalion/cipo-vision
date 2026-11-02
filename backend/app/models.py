@@ -27,6 +27,14 @@ class UserSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+class UserSignature(Base):
+    __tablename__ = "user_signatures"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    signature_data: Mapped[str] = mapped_column(Text, nullable=False)
+    signature_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
 class Request(Base):
     __tablename__ = "requests"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

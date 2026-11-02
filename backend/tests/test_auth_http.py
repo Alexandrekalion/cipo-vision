@@ -51,3 +51,16 @@ def test_dev_login_is_disabled_when_homologation_flag_is_false(monkeypatch):
     from app.config import settings
     monkeypatch.setattr(settings, "dev_auth_enabled", False)
     assert client.post("/auth/dev-login", json={"username": "alice"}).status_code == 404
+
+def test_user_signature_is_private_and_requires_csrf():
+    response = client.post("/auth/login", json={"username": "alice", "password": "alice-test"})
+    csrf = response.json()["access_token"]
+    image = "data:image/png;base64,ZmFrZS1zaWduYXR1cmU="
+    assert client.put("/auth/signature", json={"signature_data": image}).status_code == 403
+    saved = client.put("/auth/signature", headers={"X-CSRF-Token": csrf}, json={"signature_data": image})
+    assert saved.status_code == 200
+    assert saved.json()["signature_digest"]
+    assert "signature_data" not in saved.json()
+    fetched = client.get("/auth/signature")
+    assert fetched.status_code == 200
+    assert fetched.json()["user_id"] == saved.json()["user_id"]
