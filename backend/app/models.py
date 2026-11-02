@@ -12,6 +12,13 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(160))
     role: Mapped[str] = mapped_column(String(80))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    employee_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    department: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    ad_subject_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    ad_groups: Mapped[str | None] = mapped_column(Text, nullable=True)
+    authorized_profiles: Mapped[str | None] = mapped_column(Text, nullable=True)
+    profile_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 class UserCredential(Base):
     __tablename__ = "user_credentials"

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import hashlib
+import json
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -7,7 +8,7 @@ from .auth import current_user as dev_current_user, require_roles as dev_require
 from .security import SESSION_COOKIE, create_session, current_session, current_user, hash_password, require_csrf, require_roles, verify_password
 from .db import get_db
 from .models import AuditEvent, Extraction, Request, Signature, User, UserCredential, UserSignature, WorkflowEvent
-from .schemas import Decision, DevLogin, ExtractionCreate, LoginPayload, RequestCorrection, RequestCreate, RequestOut, SignatureCreate, SignatureOut, Token, UserSignatureOut, UserSignaturePayload
+from .schemas import Decision, DevLogin, ExtractionCreate, LoginPayload, ProfileOut, ProfilePayload, RequestCorrection, RequestCreate, RequestOut, SignatureCreate, SignatureOut, Token, UserSignatureOut, UserSignaturePayload
 
 app = FastAPI(title="CIPO VISION API", version="0.1.0", description="API de desenvolvimento isolada; sem AD, NAS ou câmeras reais.")
 
@@ -27,7 +28,31 @@ def logout(response: Response, session_data=Depends(current_session), csrf=Depen
 
 @app.get('/auth/me')
 def me(user: User = Depends(current_user)):
-    return {'id': user.id, 'username': user.username, 'display_name': user.display_name, 'role': user.role}
+    complete = bool(user.full_name and user.employee_number and user.department and user.profile_completed_at)
+    return {'id': user.id, 'username': user.username, 'display_name': user.display_name, 'role': user.role, 'profile_complete': complete, 'authorized_profiles': json.loads(user.authorized_profiles or '[]')}
+
+@app.get('/auth/profile', response_model=ProfileOut)
+def get_profile(user: User = Depends(current_user)):
+    return {'user_id': user.id, 'full_name': user.full_name, 'employee_number': user.employee_number, 'department': user.department, 'authorized_profiles': json.loads(user.authorized_profiles or '[]'), 'profile_completed_at': user.profile_completed_at}
+
+@app.put('/auth/profile', response_model=ProfileOut)
+def complete_profile(payload: ProfilePayload, db: Session = Depends(get_db), user: User = Depends(current_user), csrf=Depends(require_csrf)):
+    if not payload.full_name.strip() or not payload.employee_number.strip() or not payload.department.strip():
+        raise HTTPException(422, 'Nome, matrícula e setor são obrigatórios')
+    if not payload.signature_data.startswith('data:image/') or len(payload.signature_data) > 500000:
+        raise HTTPException(422, 'Assinatura deve ser uma imagem válida')
+    user.full_name = payload.full_name.strip(); user.display_name = user.full_name
+    user.employee_number = payload.employee_number.strip(); user.department = payload.department.strip()
+    user.profile_completed_at = datetime.now(timezone.utc)
+    if not user.authorized_profiles: user.authorized_profiles = json.dumps([user.role])
+    digest = hashlib.sha256(payload.signature_data.encode()).hexdigest()
+    profile = db.get(UserSignature, user.id)
+    if profile:
+        profile.signature_data = payload.signature_data; profile.signature_digest = digest; profile.updated_at = datetime.now(timezone.utc)
+    else:
+        db.add(UserSignature(user_id=user.id, signature_data=payload.signature_data, signature_digest=digest, created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc)))
+    db.commit(); db.refresh(user)
+    return get_profile(user)
 
 @app.put('/auth/signature', response_model=UserSignatureOut)
 def save_signature(payload: UserSignaturePayload, db: Session = Depends(get_db), user: User = Depends(current_user), csrf=Depends(require_csrf)):

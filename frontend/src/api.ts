@@ -1,6 +1,7 @@
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
 
-export type User = { id: number; username: string; display_name: string; role: string }
+export type User = { id: number; username: string; display_name: string; role: string; profile_complete: boolean; authorized_profiles: string[] }
+export type Profile = { user_id:number; full_name:string|null; employee_number:string|null; department:string|null; authorized_profiles:string[]; profile_completed_at:string|null }
 export type RequestItem = { id: number; protocol: string; status: string; employee: string; occurrence_type: string; occurred_at: string; location: string; camera_area?: string; reason: string; requester_id: number; manager_id: number }
 
 let csrfToken = ''
@@ -19,6 +20,7 @@ export async function login(username: string, password: string) {
   return me()
 }
 export function me() { return call<User>('/auth/me') }
+export function completeProfile(payload: {full_name:string; employee_number:string; department:string; signature_data:string}) { return call<Profile>('/auth/profile', {method:'PUT', body: JSON.stringify(payload)}) }
 export function listRequests() { return call<RequestItem[]>('/requests') }
 export function createRequest(payload: object) { return call<RequestItem>('/requests', { method: 'POST', body: JSON.stringify(payload) }) }
 export type AuditItem = { id: number; action: string; detail: string; created_at: string }

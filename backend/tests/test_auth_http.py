@@ -64,3 +64,14 @@ def test_user_signature_is_private_and_requires_csrf():
     fetched = client.get("/auth/signature")
     assert fetched.status_code == 200
     assert fetched.json()["user_id"] == saved.json()["user_id"]
+
+def test_first_access_profile_requires_corporate_fields_and_signature():
+    response = client.post("/auth/login", json={"username": "alice", "password": "alice-test"})
+    csrf = response.json()["access_token"]
+    assert client.get("/auth/me").json()["profile_complete"] is False
+    payload = {"full_name": "Alice Teste", "employee_number": "MAT-001", "department": "TI", "signature_data": "data:image/png;base64,ZmFrZQ=="}
+    assert client.put("/auth/profile", json=payload).status_code == 403
+    saved = client.put("/auth/profile", headers={"X-CSRF-Token": csrf}, json=payload)
+    assert saved.status_code == 200
+    assert saved.json()["employee_number"] == "MAT-001"
+    assert client.get("/auth/me").json()["profile_complete"] is True

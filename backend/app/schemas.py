@@ -31,3 +31,17 @@ class UserSignatureOut(BaseModel):
     signature_digest: str
     created_at: datetime
     updated_at: datetime
+
+class ProfilePayload(BaseModel):
+    full_name: str
+    employee_number: str
+    department: str
+    signature_data: str
+
+class ProfileOut(BaseModel):
+    user_id: int
+    full_name: str | None
+    employee_number: str | None
+    department: str | None
+    authorized_profiles: list[str]
+    profile_completed_at: datetime | None
