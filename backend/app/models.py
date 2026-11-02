@@ -43,6 +43,7 @@ class Request(Base):
     rh_required: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     witness_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    safety_required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 class Signature(Base):
     __tablename__ = "signatures"
@@ -52,6 +53,9 @@ class Signature(Base):
     kind: Mapped[str] = mapped_column(String(80))
     document_version: Mapped[str] = mapped_column(String(40), default="v1")
     confirmed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    purpose: Mapped[str] = mapped_column(String(120), default="solicitacao")
+    document_hash: Mapped[str] = mapped_column(String(128), default="")
+    confirmed: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
@@ -61,3 +65,22 @@ class AuditEvent(Base):
     action: Mapped[str] = mapped_column(String(120))
     detail: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class WorkflowEvent(Base):
+    __tablename__ = "workflow_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), nullable=False, index=True)
+    actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    from_status: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    to_status: Mapped[str] = mapped_column(String(80), nullable=False)
+    detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+class Extraction(Base):
+    __tablename__ = "extractions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id"), unique=True, nullable=False)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    storage_reference: Mapped[str] = mapped_column(String(255), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
