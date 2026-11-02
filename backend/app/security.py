@@ -26,7 +26,7 @@ def create_session(response: Response, user: User, db: Session) -> UserSession:
     now = datetime.now(timezone.utc)
     session = UserSession(id=secrets.token_urlsafe(48), user_id=user.id, csrf_token=secrets.token_urlsafe(32), expires_at=now + timedelta(hours=SESSION_HOURS))
     db.add(session); db.commit()
-    response.set_cookie(SESSION_COOKIE, session.id, httponly=True, secure=False, samesite="lax", max_age=SESSION_HOURS * 3600)
+    response.set_cookie(SESSION_COOKIE, session.id, httponly=True, secure=settings.cookie_secure, samesite="lax", max_age=SESSION_HOURS * 3600)
     return session
 
 def current_session(cipo_session: str | None = Cookie(default=None), db: Session = Depends(get_db)) -> tuple[User, UserSession]:
