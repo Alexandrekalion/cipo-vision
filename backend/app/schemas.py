@@ -11,3 +11,12 @@ class Decision(BaseModel):
 class RequestOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int; protocol: str; status: str; employee: str; requester_id: int; manager_id: int; witness_id: int | None; rh_required: bool | None
+class SignatureCreate(BaseModel):
+    purpose: str
+    document_hash: str
+    confirmed: bool
+class ExtractionCreate(BaseModel):
+    storage_reference: str
+class SignatureOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int; request_id: int; user_id: int; kind: str; purpose: str; document_hash: str; confirmed: bool
