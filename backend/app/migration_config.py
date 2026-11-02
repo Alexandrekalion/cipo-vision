@@ -6,6 +6,7 @@ never silently migrate that database during PostgreSQL deployment.
 
 import os
 
+from dotenv import load_dotenv
 from sqlalchemy.engine import URL, make_url
 
 
@@ -17,6 +18,9 @@ EXPECTED_USERNAME = "cipo_vision_app"
 
 
 def get_migration_database_url() -> URL:
+    # Alembic runs outside the Pydantic settings object; load the same local
+    # .env file used by the application, without logging its contents.
+    load_dotenv()
     raw_url = os.getenv("DATABASE_URL")
     if not raw_url:
         raise RuntimeError("DATABASE_URL is required for PostgreSQL migrations")
