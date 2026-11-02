@@ -17,7 +17,13 @@ def test_unauthenticated_is_rejected():
 
 def test_approval_requires_witness_and_rh_decision():
     from app.config import settings
+    from app.db import SessionLocal
+    from app.models import User
     settings.dev_auth_enabled = True
+    db = SessionLocal()
+    if not db.query(User).filter(User.username == 'giuliano').first():
+        db.add(User(username='giuliano', display_name='Giuliano', role='Gerente aprovador')); db.commit()
+    db.close()
     response = client.post('/auth/dev-login',json={'username':'giuliano'})
     assert response.status_code == 200
     assert response.json()['access_token'] == 'dev-giuliano'
