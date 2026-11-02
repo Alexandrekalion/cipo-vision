@@ -28,8 +28,12 @@ def get_migration_database_url() -> URL:
     url = make_url(raw_url)
     if url.drivername != EXPECTED_DRIVER:
         raise RuntimeError("DATABASE_URL must use the approved PostgreSQL psycopg driver")
-    if url.host != EXPECTED_HOST or url.port != EXPECTED_PORT:
+    test_mode = os.getenv("CIPO_MIGRATION_TEST") == "1"
+    port = 55432 if test_mode else EXPECTED_PORT
+    database = "cipo_test" if test_mode else EXPECTED_DATABASE
+    username = "cipo_test" if test_mode else EXPECTED_USERNAME
+    if url.host != EXPECTED_HOST or url.port != port:
         raise RuntimeError("DATABASE_URL must target the approved local PostgreSQL endpoint")
-    if url.database != EXPECTED_DATABASE or url.username != EXPECTED_USERNAME:
+    if url.database != database or url.username != username:
         raise RuntimeError("DATABASE_URL must target the approved CIPO VISION database")
     return url
