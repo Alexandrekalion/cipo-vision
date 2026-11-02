@@ -51,7 +51,12 @@ def approve(c, csrf, rid, witness_id, rh):
 def finish_flow(require_rh):
     ids = seed(); requester, rc = auth("e2e_requester"); rid = create(requester, rc, ids["e2e_manager"]); sign(requester, rc, rid, "SOLICITANTE")
     manager, mc = auth("e2e_manager"); assert approve(manager, mc, rid, ids["e2e_witness"], require_rh).status_code == 200
-    witness, wc = auth("e2e_witness"); safety, sc = auth("e2e_safety"); sign(witness, wc, rid, "TESTEMUNHA"); sign(safety, sc, rid, "SEGURANCA")
+    safety, sc = auth("e2e_safety")
+    def witness_sign():
+        c, csrf = auth("e2e_witness"); return c.post(f"/requests/{rid}/sign", headers={"X-CSRF-Token":csrf}, json={"purpose":"TESTEMUNHA", "document_hash":f"hash-{rid}", "confirmed":True}).status_code
+    with ThreadPoolExecutor(max_workers=2) as pool: witness_results=list(pool.map(lambda _: witness_sign(), [1, 2]))
+    assert sorted(witness_results) == [200, 409]
+    sign(safety, sc, rid, "SEGURANCA")
     ti, tc = auth("e2e_ti")
     if require_rh:
         assert ti.post(f"/requests/{rid}/extraction/start", headers={"X-CSRF-Token": tc}, json={"storage_reference": "e2e://video"}).status_code == 409

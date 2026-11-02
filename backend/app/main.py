@@ -122,11 +122,25 @@ def sign_request(request_id: int, payload: SignatureCreate, db: Session = Depend
     existing = db.query(Signature).filter_by(request_id=request_id, user_id=user.id, purpose=payload.purpose).first()
     if existing: raise HTTPException(409, 'Assinatura já confirmada')
     sig = Signature(request_id=request_id,user_id=user.id,kind=payload.purpose,purpose=payload.purpose,document_hash=payload.document_hash,confirmed=True)
-    db.add(sig); db.add(AuditEvent(request_id=request_id,actor_id=user.id,action='SIGNATURE_CONFIRMED',detail=payload.purpose)); db.flush()
+    db.add(sig); db.add(AuditEvent(request_id=request_id,actor_id=user.id,action='SIGNATURE_CONFIRMED',detail=payload.purpose))
     required = ['SOLICITANTE', 'GERENTE', 'TESTEMUNHA', 'SEGURANCA'] + (['RH'] if item.rh_required else [])
     kinds = {s.kind for s in db.query(Signature).filter_by(request_id=request_id).all()}
     if set(required) <= kinds: item.status = 'PRONTA_PARA_EXTRACAO'
-    db.commit(); db.refresh(sig); return sig
+    try:
+        db.flush()
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, 'Assinatura já confirmada')
+    # Re-evaluate completion after commit so concurrent signatures cannot
+    # leave the request stuck in AGUARDANDO_ASSINATURAS.
+    fresh = db.query(Request).with_for_update().filter(Request.id == request_id).first()
+    required = ['SOLICITANTE', 'GERENTE', 'TESTEMUNHA', 'SEGURANCA'] + (['RH'] if fresh.rh_required else [])
+    kinds = {s.kind for s in db.query(Signature).filter_by(request_id=request_id).all()}
+    if fresh.status == 'AGUARDANDO_ASSINATURAS' and set(required) <= kinds:
+        fresh.status = 'PRONTA_PARA_EXTRACAO'
+        db.commit()
+    db.refresh(sig); return sig
 
 @app.get('/requests/{request_id}/history')
 def history(request_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
