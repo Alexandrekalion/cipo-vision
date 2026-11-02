@@ -45,7 +45,17 @@ def create_request(payload: RequestCreate, db: Session = Depends(get_db), user: 
 def list_requests(db: Session = Depends(get_db), user: User = Depends(current_user)):
     query=db.query(Request)
     if user.role == 'Gestor solicitante': query=query.filter(Request.requester_id==user.id)
+    elif user.role == 'Gerente aprovador': query=query.filter(Request.manager_id==user.id)
+    elif user.role == 'Testemunha': query=query.filter(Request.witness_id==user.id)
+    elif user.role == 'Segurança do Trabalho': query=query.filter(Request.status=='AGUARDANDO_ASSINATURAS')
+    elif user.role == 'RH': query=query.filter(Request.rh_required.is_(True), Request.status=='AGUARDANDO_ASSINATURAS')
+    elif user.role == 'TI': query=query.filter(Request.status.in_(['PRONTA_PARA_EXTRACAO','EM_EXTRACAO']))
     return query.all()
+
+@app.get('/users/authorized')
+def authorized_users(role: str, db: Session = Depends(get_db), user: User = Depends(require_roles('Gerente aprovador', 'administrador'))):
+    if role != 'Testemunha': raise HTTPException(422, 'Somente testemunhas podem ser designadas nesta etapa')
+    return db.query(User).filter(User.role == role, User.active.is_(True)).order_by(User.display_name).all()
 
 @app.post('/requests/{request_id}/decision', response_model=RequestOut)
 def decide(request_id:int,payload:Decision,db:Session=Depends(get_db),user:User=Depends(require_roles('Gerente aprovador')), csrf=Depends(require_csrf)):

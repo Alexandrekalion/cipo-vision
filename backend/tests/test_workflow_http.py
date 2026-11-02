@@ -52,6 +52,9 @@ def test_full_workflow_without_rh_and_extraction_rbac():
     assert requester.post(f"/requests/{request_id}/sign", headers={"X-CSRF-Token": requester_csrf}, json={"purpose":"SOLICITANTE", "document_hash":"hash-v1", "confirmed":True}).status_code == 200
 
     manager, manager_csrf = login("manager")
+    witnesses = manager.get("/users/authorized?role=Testemunha")
+    assert witnesses.status_code == 200
+    assert witnesses.json()[0]["username"] == "witness"
     decision = manager.post(f"/requests/{request_id}/decision", headers={"X-CSRF-Token": manager_csrf}, json={"decision":"APPROVE", "manager_signature":True, "witness_id":ids["witness"], "rh_required":False})
     assert decision.status_code == 200
     assert manager.post(f"/requests/{request_id}/decision", headers={"X-CSRF-Token": manager_csrf}, json={"decision":"APPROVE", "manager_signature":True, "witness_id":ids["witness"], "rh_required":False}).status_code == 409
