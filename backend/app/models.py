@@ -59,6 +59,8 @@ class Request(Base):
     witness_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     safety_required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    complementary_department: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    complementary_signer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
 class Signature(Base):
     __tablename__ = "signatures"

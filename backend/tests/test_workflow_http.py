@@ -97,3 +97,15 @@ def test_manager_return_requires_reason_and_requester_can_resubmit():
     resent = requester.post(f"/requests/{request_id}/resubmit", headers={"X-CSRF-Token":requester_csrf}, json={"employee":"Colaborador corrigido", "occurrence_type":"Teste", "occurred_at":"2026-11-02T10:00:00Z", "location":"Local corrigido", "camera_area":"C02", "reason":"Motivo corrigido"})
     assert resent.status_code == 200 and resent.json()["status"] == "RASCUNHO"
 
+def test_new_flow_uses_one_authorized_complementary_signer():
+    ids = seed_users(); requester, requester_csrf = login("requester"); request_id = create_request(requester, requester_csrf, ids["manager"])
+    manager, manager_csrf = login("manager")
+    missing = manager.post(f"/requests/{request_id}/decision", headers={"X-CSRF-Token": manager_csrf}, json={"decision":"APPROVE", "manager_signature":True})
+    assert missing.status_code == 422
+    approved = manager.post(f"/requests/{request_id}/decision", headers={"X-CSRF-Token": manager_csrf}, json={"decision":"APPROVE", "manager_signature":True, "complementary_department":"RH", "complementary_signer_id":ids["rh"]})
+    assert approved.status_code == 200
+    wrong, wrong_csrf = login("safety")
+    assert wrong.post(f"/requests/{request_id}/sign", headers={"X-CSRF-Token":wrong_csrf}, json={"purpose":"COMPLEMENTAR", "document_hash":"h", "confirmed":True}).status_code == 403
+    rh, rh_csrf = login("rh")
+    assert rh.post(f"/requests/{request_id}/sign", headers={"X-CSRF-Token":rh_csrf}, json={"purpose":"COMPLEMENTAR", "document_hash":"h", "confirmed":True}).status_code == 200
+

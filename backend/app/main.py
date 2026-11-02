@@ -83,7 +83,11 @@ def dev_login(payload: DevLogin, db: Session = Depends(get_db)):
 @app.post('/requests', response_model=RequestOut)
 def create_request(payload: RequestCreate, db: Session = Depends(get_db), user: User = Depends(require_roles('Gestor solicitante')), csrf=Depends(require_csrf)):
     item = Request(protocol=f"CV-DEV-{int(datetime.now().timestamp())}", requester_id=user.id, manager_id=payload.manager_id, status='RASCUNHO', employee=payload.employee, occurrence_type=payload.occurrence_type, occurred_at=payload.occurred_at, location=payload.location, camera_area=payload.camera_area, reason=payload.reason)
-    db.add(item); db.flush(); db.add(AuditEvent(request_id=item.id, actor_id=user.id, action='REQUEST_CREATED')); db.add(WorkflowEvent(request_id=item.id, actor_id=user.id, to_status='RASCUNHO')); db.commit(); db.refresh(item); return item
+    db.add(item); db.flush()
+    if payload.signature_confirmed:
+        if not db.get(UserSignature, user.id): raise HTTPException(422, 'Cadastre sua assinatura antes de enviar a solicitação')
+        db.add(Signature(request_id=item.id, user_id=user.id, kind='SOLICITANTE', purpose='SOLICITANTE', document_hash=f'request-{item.id}', confirmed=True)); item.status='AGUARDANDO_APROVACAO_GERENCIAL'
+    db.add(AuditEvent(request_id=item.id, actor_id=user.id, action='REQUEST_CREATED')); db.add(WorkflowEvent(request_id=item.id, actor_id=user.id, to_status=item.status)); db.commit(); db.refresh(item); return item
 
 @app.get('/requests', response_model=list[RequestOut])
 def list_requests(db: Session = Depends(get_db), user: User = Depends(current_user)):
@@ -98,20 +102,30 @@ def list_requests(db: Session = Depends(get_db), user: User = Depends(current_us
 
 @app.get('/users/authorized')
 def authorized_users(role: str, db: Session = Depends(get_db), user: User = Depends(require_roles('Gerente aprovador', 'administrador'))):
-    if role != 'Testemunha': raise HTTPException(422, 'Somente testemunhas podem ser designadas nesta etapa')
+    if role not in ('RH', 'Segurança do Trabalho', 'Testemunha'): raise HTTPException(422, 'Departamento complementar inválido')
     return db.query(User).filter(User.role == role, User.active.is_(True)).order_by(User.display_name).all()
 
 @app.post('/requests/{request_id}/decision', response_model=RequestOut)
 def decide(request_id:int,payload:Decision,db:Session=Depends(get_db),user:User=Depends(require_roles('Gerente aprovador')), csrf=Depends(require_csrf)):
     item=db.query(Request).with_for_update().filter(Request.id == request_id).first()
     if not item or item.manager_id!=user.id: raise HTTPException(404,'Solicitação não encontrada')
-    if item.status != 'RASCUNHO': raise HTTPException(409, 'Decisão gerencial já realizada ou solicitação fora da etapa')
+    if item.status not in ('RASCUNHO', 'AGUARDANDO_APROVACAO_GERENCIAL'): raise HTTPException(409, 'Decisão gerencial já realizada ou solicitação fora da etapa')
     if payload.decision=='APPROVE':
-        if not payload.manager_signature or not payload.witness_id or payload.rh_required is None: raise HTTPException(422,'Assinatura, testemunha e decisão de RH são obrigatórias')
-        witness = db.get(User, payload.witness_id)
-        if not witness or witness.role != 'Testemunha': raise HTTPException(422, 'Testemunha inválida')
-        item.status='AGUARDANDO_ASSINATURAS';item.witness_id=payload.witness_id;item.rh_required=payload.rh_required; item.safety_required=True
-        db.add(Signature(request_id=item.id,user_id=user.id,kind='GERENTE',purpose='aprovacao',document_hash=f'request-{item.id}',confirmed=True))
+        if not payload.manager_signature: raise HTTPException(422,'Assinatura gerencial é obrigatória')
+        # Keep old requests readable and operable during the transition. New
+        # approvals must use the single complementary signer fields below.
+        if not payload.complementary_department and payload.witness_id:
+            witness = db.get(User, payload.witness_id)
+            if not witness or witness.role != 'Testemunha': raise HTTPException(422, 'Testemunha histórica inválida')
+            item.status='AGUARDANDO_ASSINATURAS'; item.witness_id=witness.id; item.rh_required=payload.rh_required; item.safety_required=True
+            db.add(Signature(request_id=item.id,user_id=user.id,kind='GERENTE',purpose='aprovacao',document_hash=f'request-{item.id}',confirmed=True))
+        else:
+            if not payload.complementary_department or not payload.complementary_signer_id: raise HTTPException(422,'Departamento e usuário complementar são obrigatórios')
+            expected = {'RH':'RH', 'SEGURANCA':'Segurança do Trabalho', 'Segurança do Trabalho':'Segurança do Trabalho'}.get(payload.complementary_department)
+            signer = db.get(User, payload.complementary_signer_id)
+            if not expected or not signer or signer.role != expected: raise HTTPException(422, 'Usuário complementar não autorizado para o departamento escolhido')
+            item.status='AGUARDANDO_ASSINATURAS'; item.complementary_department=expected; item.complementary_signer_id=signer.id; item.witness_id=None; item.rh_required=None; item.safety_required=False
+            db.add(Signature(request_id=item.id,user_id=user.id,kind='GERENTE',purpose='aprovacao',document_hash=f'request-{item.id}',confirmed=True))
     elif payload.decision=='REJECT':
         if not payload.reason: raise HTTPException(422,'Justificativa obrigatória para recusa')
         item.status='RECUSADA'
@@ -137,18 +151,20 @@ def sign_request(request_id: int, payload: SignatureCreate, db: Session = Depend
     if not item or not payload.confirmed or not payload.document_hash: raise HTTPException(422, 'Confirmação e integridade do documento são obrigatórias')
     if item.status not in ('RASCUNHO', 'AGUARDANDO_ASSINATURAS'):
         raise HTTPException(409, 'Solicitação fora da etapa de assinatura')
-    allowed = {'SOLICITANTE': ('Gestor solicitante', item.requester_id), 'TESTEMUNHA': ('Testemunha', item.witness_id), 'SEGURANCA': ('Segurança do Trabalho', None), 'RH': ('RH', None)}
+    allowed = {'SOLICITANTE': ('Gestor solicitante', item.requester_id), 'TESTEMUNHA': ('Testemunha', item.witness_id), 'SEGURANCA': ('Segurança do Trabalho', None), 'RH': ('RH', None), 'COMPLEMENTAR': (item.complementary_department, item.complementary_signer_id)}
     rule = allowed.get(payload.purpose)
     if not rule or user.role != rule[0] or (rule[1] is not None and user.id != rule[1]): raise HTTPException(403, 'Usuário não autorizado para esta assinatura')
-    if payload.purpose == 'RH' and not item.rh_required:
+    if payload.purpose == 'RH' and item.complementary_department and item.complementary_department != 'RH':
         raise HTTPException(409, 'RH não foi exigido pelo gerente')
+    if payload.purpose == 'SEGURANCA' and item.complementary_department and item.complementary_department != 'Segurança do Trabalho':
+        raise HTTPException(409, 'Segurança do Trabalho não foi exigida pelo gerente')
     if payload.purpose == 'GERENTE':
         raise HTTPException(403, 'A assinatura gerencial ocorre durante a aprovação')
     existing = db.query(Signature).filter_by(request_id=request_id, user_id=user.id, purpose=payload.purpose).first()
     if existing: raise HTTPException(409, 'Assinatura já confirmada')
     sig = Signature(request_id=request_id,user_id=user.id,kind=payload.purpose,purpose=payload.purpose,document_hash=payload.document_hash,confirmed=True)
     db.add(sig); db.add(AuditEvent(request_id=request_id,actor_id=user.id,action='SIGNATURE_CONFIRMED',detail=payload.purpose))
-    required = ['SOLICITANTE', 'GERENTE', 'TESTEMUNHA', 'SEGURANCA'] + (['RH'] if item.rh_required else [])
+    required = ['SOLICITANTE', 'GERENTE', 'COMPLEMENTAR'] if item.complementary_department else ['SOLICITANTE', 'GERENTE', 'TESTEMUNHA', 'SEGURANCA'] + (['RH'] if item.rh_required else [])
     kinds = {s.kind for s in db.query(Signature).filter_by(request_id=request_id).all()}
     if set(required) <= kinds: item.status = 'PRONTA_PARA_EXTRACAO'
     try:
@@ -160,7 +176,7 @@ def sign_request(request_id: int, payload: SignatureCreate, db: Session = Depend
     # Re-evaluate completion after commit so concurrent signatures cannot
     # leave the request stuck in AGUARDANDO_ASSINATURAS.
     fresh = db.query(Request).with_for_update().filter(Request.id == request_id).first()
-    required = ['SOLICITANTE', 'GERENTE', 'TESTEMUNHA', 'SEGURANCA'] + (['RH'] if fresh.rh_required else [])
+    required = ['SOLICITANTE', 'GERENTE', 'COMPLEMENTAR'] if fresh.complementary_department else ['SOLICITANTE', 'GERENTE', 'TESTEMUNHA', 'SEGURANCA'] + (['RH'] if fresh.rh_required else [])
     kinds = {s.kind for s in db.query(Signature).filter_by(request_id=request_id).all()}
     if fresh.status == 'AGUARDANDO_ASSINATURAS' and set(required) <= kinds:
         fresh.status = 'PRONTA_PARA_EXTRACAO'

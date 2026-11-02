@@ -120,3 +120,13 @@ def test_postgres_concurrent_resubmit_has_one_success_and_one_conflict():
     with ThreadPoolExecutor(max_workers=2) as pool: results = list(pool.map(lambda _: resubmit(), [1, 2]))
     assert sorted(results) == [200, 409]
     db = SessionLocal(); assert db.get(Request, rid).status == "RASCUNHO"; events = db.query(WorkflowEvent).filter_by(request_id=rid).all(); assert len(events) == 3; assert sum(event.from_status == "DEVOLVIDA_PARA_CORRECAO" and event.to_status == "RASCUNHO" for event in events) == 1; db.close()
+
+def test_postgres_complementary_department_flow_rejects_wrong_signer():
+    ids = seed(); requester, rc = auth("e2e_requester"); rid = create(requester, rc, ids["e2e_manager"])
+    manager, mc = auth("e2e_manager")
+    approved = manager.post(f"/requests/{rid}/decision", headers={"X-CSRF-Token":mc}, json={"decision":"APPROVE", "manager_signature":True, "complementary_department":"RH", "complementary_signer_id":ids["e2e_rh"]})
+    assert approved.status_code == 200
+    safety, sc = auth("e2e_safety")
+    assert safety.post(f"/requests/{rid}/sign", headers={"X-CSRF-Token":sc}, json={"purpose":"COMPLEMENTAR", "document_hash":f"hash-{rid}", "confirmed":True}).status_code == 403
+    rh, hc = auth("e2e_rh")
+    assert rh.post(f"/requests/{rid}/sign", headers={"X-CSRF-Token":hc}, json={"purpose":"COMPLEMENTAR", "document_hash":f"hash-{rid}", "confirmed":True}).status_code == 200

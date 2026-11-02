@@ -5,11 +5,11 @@ class DevLogin(BaseModel): username: str
 class Token(BaseModel): access_token: str; token_type: str = "bearer"
 class LoginPayload(BaseModel): username: str; password: str
 class RequestCreate(BaseModel):
-    employee: str; occurrence_type: str; occurred_at: datetime; location: str; camera_area: str | None = None; reason: str; manager_id: int
+    employee: str; occurrence_type: str; occurred_at: datetime; location: str; camera_area: str | None = None; reason: str; manager_id: int; signature_confirmed: bool = False
 class RequestCorrection(BaseModel):
     employee: str; occurrence_type: str; occurred_at: datetime; location: str; camera_area: str | None = None; reason: str
 class Decision(BaseModel):
-    decision: str; manager_signature: bool = False; witness_id: int | None = None; rh_required: bool | None = None; reason: str | None = None
+    decision: str; manager_signature: bool = False; complementary_department: str | None = None; complementary_signer_id: int | None = None; witness_id: int | None = None; rh_required: bool | None = None; reason: str | None = None
 class RequestOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int; protocol: str; status: str; employee: str; requester_id: int; manager_id: int; witness_id: int | None; rh_required: bool | None

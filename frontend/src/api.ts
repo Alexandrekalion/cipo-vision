@@ -26,7 +26,7 @@ export function createRequest(payload: object) { return call<RequestItem>('/requ
 export type AuditItem = { id: number; action: string; detail: string; created_at: string }
 export function requestHistory(id: number) { return call<AuditItem[]>(`/requests/${id}/history`) }
 export type AuthorizedUser = { id: number; username: string; display_name: string; role: string }
-export function authorizedWitnesses() { return call<AuthorizedUser[]>('/users/authorized?role=Testemunha') }
+export function authorizedWitnesses(role='RH') { return call<AuthorizedUser[]>(`/users/authorized?role=${encodeURIComponent(role)}`) }
 export function saveSignature(signatureData: string) { return call('/auth/signature', { method: 'PUT', body: JSON.stringify({ signature_data: signatureData }) }) }
 export function resubmitRequest(id: number, payload: object) { return call<RequestItem>(`/requests/${id}/resubmit`, { method: 'POST', body: JSON.stringify(payload) }) }
 export function signRequest(id: number, purpose: string, documentHash: string) { return call(`/requests/${id}/sign`, { method: 'POST', body: JSON.stringify({ purpose, document_hash: documentHash, confirmed: true }) }) }
