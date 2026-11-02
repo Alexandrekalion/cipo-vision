@@ -33,7 +33,8 @@ def current_session(cipo_session: str | None = Cookie(default=None), db: Session
     if not cipo_session: raise HTTPException(401, "Autenticação necessária")
     session = db.get(UserSession, cipo_session)
     now = datetime.now(timezone.utc)
-    if not session or session.revoked_at or session.expires_at <= now: raise HTTPException(401, "Sessão inválida ou expirada")
+    expires_at = session.expires_at.replace(tzinfo=timezone.utc) if session and session.expires_at.tzinfo is None else (session.expires_at if session else now)
+    if not session or session.revoked_at or expires_at <= now: raise HTTPException(401, "Sessão inválida ou expirada")
     user = db.get(User, session.user_id)
     if not user or not user.active: raise HTTPException(401, "Usuário inativo")
     return user, session
