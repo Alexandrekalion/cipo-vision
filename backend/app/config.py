@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./cipo_vision_dev.sqlite3"
     dev_auth_enabled: bool = True
     cookie_secure: bool = False
+    enforce_profile_completion: bool = True
     model_config = SettingsConfigDict(env_file=str(BACKEND_ENV_FILE), extra="ignore")
 
 settings = Settings()

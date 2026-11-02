@@ -40,6 +40,12 @@ def current_session(cipo_session: str | None = Cookie(default=None), db: Session
     return user, session
 
 def current_user(session_data=Depends(current_session)) -> User:
+    user = session_data[0]
+    if settings.enforce_profile_completion and not (user.full_name and user.employee_number and user.department and user.profile_completed_at):
+        raise HTTPException(403, "Cadastro inicial incompleto")
+    return user
+
+def current_user_unrestricted(session_data=Depends(current_session)) -> User:
     return session_data[0]
 
 def require_csrf(x_csrf_token: str | None = Header(default=None), session_data=Depends(current_session)):

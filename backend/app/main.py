@@ -5,7 +5,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from .auth import current_user as dev_current_user, require_roles as dev_require_roles
-from .security import SESSION_COOKIE, create_session, current_session, current_user, hash_password, require_csrf, require_roles, verify_password
+from .security import SESSION_COOKIE, create_session, current_session, current_user, current_user_unrestricted, hash_password, require_csrf, require_roles, verify_password
 from .db import get_db
 from .models import AuditEvent, Extraction, Request, Signature, User, UserCredential, UserSignature, WorkflowEvent
 from .schemas import Decision, DevLogin, ExtractionCreate, LoginPayload, ProfileOut, ProfilePayload, RequestCorrection, RequestCreate, RequestOut, SignatureCreate, SignatureOut, Token, UserSignatureOut, UserSignaturePayload
@@ -27,16 +27,16 @@ def logout(response: Response, session_data=Depends(current_session), csrf=Depen
     return {'ok': True}
 
 @app.get('/auth/me')
-def me(user: User = Depends(current_user)):
+def me(user: User = Depends(current_user_unrestricted)):
     complete = bool(user.full_name and user.employee_number and user.department and user.profile_completed_at)
     return {'id': user.id, 'username': user.username, 'display_name': user.display_name, 'role': user.role, 'profile_complete': complete, 'authorized_profiles': json.loads(user.authorized_profiles or '[]')}
 
 @app.get('/auth/profile', response_model=ProfileOut)
-def get_profile(user: User = Depends(current_user)):
+def get_profile(user: User = Depends(current_user_unrestricted)):
     return {'user_id': user.id, 'full_name': user.full_name, 'employee_number': user.employee_number, 'department': user.department, 'authorized_profiles': json.loads(user.authorized_profiles or '[]'), 'profile_completed_at': user.profile_completed_at}
 
 @app.put('/auth/profile', response_model=ProfileOut)
-def complete_profile(payload: ProfilePayload, db: Session = Depends(get_db), user: User = Depends(current_user), csrf=Depends(require_csrf)):
+def complete_profile(payload: ProfilePayload, db: Session = Depends(get_db), user: User = Depends(current_user_unrestricted), csrf=Depends(require_csrf)):
     if not payload.full_name.strip() or not payload.employee_number.strip() or not payload.department.strip():
         raise HTTPException(422, 'Nome, matrícula e setor são obrigatórios')
     if not payload.signature_data.startswith('data:image/') or len(payload.signature_data) > 500000:
@@ -55,7 +55,7 @@ def complete_profile(payload: ProfilePayload, db: Session = Depends(get_db), use
     return get_profile(user)
 
 @app.put('/auth/signature', response_model=UserSignatureOut)
-def save_signature(payload: UserSignaturePayload, db: Session = Depends(get_db), user: User = Depends(current_user), csrf=Depends(require_csrf)):
+def save_signature(payload: UserSignaturePayload, db: Session = Depends(get_db), user: User = Depends(current_user_unrestricted), csrf=Depends(require_csrf)):
     if not payload.signature_data.startswith('data:image/') or len(payload.signature_data) > 500000:
         raise HTTPException(422, 'Assinatura deve ser uma imagem válida')
     digest = hashlib.sha256(payload.signature_data.encode()).hexdigest()
@@ -67,7 +67,7 @@ def save_signature(payload: UserSignaturePayload, db: Session = Depends(get_db),
     db.commit(); db.refresh(profile); return profile
 
 @app.get('/auth/signature', response_model=UserSignatureOut)
-def get_signature(db: Session = Depends(get_db), user: User = Depends(current_user)):
+def get_signature(db: Session = Depends(get_db), user: User = Depends(current_user_unrestricted)):
     profile = db.get(UserSignature, user.id)
     if not profile: raise HTTPException(404, 'Assinatura ainda não cadastrada')
     return profile

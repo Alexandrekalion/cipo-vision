@@ -75,3 +75,14 @@ def test_first_access_profile_requires_corporate_fields_and_signature():
     assert saved.status_code == 200
     assert saved.json()["employee_number"] == "MAT-001"
     assert client.get("/auth/me").json()["profile_complete"] is True
+
+def test_incomplete_profile_cannot_use_operational_endpoint_when_enforced(monkeypatch):
+    from app.config import settings
+    from app.db import SessionLocal
+    from app.models import User
+    db = SessionLocal(); user = User(username="incomplete", display_name="Incomplete", role="Gestor solicitante"); db.add(user); db.flush(); db.add(UserCredential(user_id=user.id, password_hash=hash_password("incomplete-test"))); db.commit(); db.close()
+    monkeypatch.setattr(settings, "enforce_profile_completion", True)
+    response = client.post("/auth/login", json={"username": "incomplete", "password": "incomplete-test"})
+    assert response.status_code == 200
+    assert client.get("/requests").status_code == 403
+    monkeypatch.setattr(settings, "enforce_profile_completion", False)
