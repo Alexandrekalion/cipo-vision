@@ -1,5 +1,6 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
+import pytest
 
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -9,6 +10,8 @@ from app.db import SessionLocal
 from app.main import app
 from app.models import AuditEvent, Extraction, Request, Signature, User, UserCredential, UserSession, UserSignature, WorkflowEvent
 from app.security import hash_password
+
+pytestmark = pytest.mark.skipif(not os.environ.get("DATABASE_URL", "").startswith("postgresql"), reason="requires isolated PostgreSQL")
 
 
 def seed():
