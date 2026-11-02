@@ -6,7 +6,9 @@ from app.migration_config import get_migration_database_url
 
 
 def test_migration_requires_database_url(monkeypatch):
-    monkeypatch.delenv("DATABASE_URL", raising=False)
+    # Keep the process environment explicitly empty so a developer .env file
+    # cannot make this safety test pass accidentally.
+    monkeypatch.setenv("DATABASE_URL", "")
     with pytest.raises(RuntimeError, match="DATABASE_URL is required"):
         get_migration_database_url()
 
