@@ -1,5 +1,6 @@
 import os
 os.environ['DATABASE_URL']='sqlite://'
+os.environ['DEV_AUTH_ENABLED']='true'
 from app.db import Base, engine
 from app import models
 Base.metadata.create_all(engine)
