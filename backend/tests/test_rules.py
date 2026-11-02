@@ -16,6 +16,8 @@ def test_unauthenticated_is_rejected():
     assert client.get('/requests').status_code == 401
 
 def test_approval_requires_witness_and_rh_decision():
+    from app.config import settings
+    settings.dev_auth_enabled = True
     response = client.post('/auth/dev-login',json={'username':'giuliano'})
     assert response.status_code == 200
     assert response.json()['access_token'] == 'dev-giuliano'

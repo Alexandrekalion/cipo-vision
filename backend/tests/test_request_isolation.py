@@ -20,13 +20,13 @@ def test_request_creation_and_requester_isolation():
         UserCredential(user_id=other.id, password_hash=hash_password("other-pass")),
         UserCredential(user_id=manager.id, password_hash=hash_password("manager-pass")),
     ])
-    db.commit(); db.close()
+    db.commit(); manager_id = manager.id; db.close()
     client = TestClient(app)
     login = client.post("/auth/login", json={"username": "test_requester", "password": "requester-pass"})
     assert login.status_code == 200
     csrf = login.json()["access_token"]
     created = client.post("/requests", headers={"X-CSRF-Token": csrf}, json={
-        "manager_id": manager.id, "employee": "Colaborador teste", "occurrence_type": "Incidente",
+        "manager_id": manager_id, "employee": "Colaborador teste", "occurrence_type": "Incidente",
         "occurred_at": "2026-11-02T10:00:00Z", "location": "Local de teste", "camera_area": "C01", "reason": "Teste isolado",
     })
     assert created.status_code == 200
