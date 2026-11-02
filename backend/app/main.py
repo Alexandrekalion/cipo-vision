@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from .auth import current_user as dev_current_user, require_roles as dev_require_roles
 from .security import SESSION_COOKIE, create_session, current_session, current_user, hash_password, require_csrf, require_roles, verify_password
@@ -48,7 +49,7 @@ def list_requests(db: Session = Depends(get_db), user: User = Depends(current_us
 
 @app.post('/requests/{request_id}/decision', response_model=RequestOut)
 def decide(request_id:int,payload:Decision,db:Session=Depends(get_db),user:User=Depends(require_roles('Gerente aprovador')), csrf=Depends(require_csrf)):
-    item=db.get(Request,request_id)
+    item=db.query(Request).with_for_update().filter(Request.id == request_id).first()
     if not item or item.manager_id!=user.id: raise HTTPException(404,'Solicitação não encontrada')
     if item.status != 'RASCUNHO': raise HTTPException(409, 'Decisão gerencial já realizada ou solicitação fora da etapa')
     if payload.decision=='APPROVE':
@@ -92,11 +93,50 @@ def history(request_id: int, db: Session = Depends(get_db), user: User = Depends
     if not item or (user.role == 'Gestor solicitante' and item.requester_id != user.id): raise HTTPException(404, 'Solicitação não encontrada')
     return db.query(AuditEvent).filter_by(request_id=request_id).order_by(AuditEvent.created_at).all()
 
+def _video_access(item: Request, user: User) -> bool:
+    return user.role == 'TI' or (user.role == 'Gerente aprovador' and item.manager_id == user.id)
+
+@app.get('/requests/{request_id}/video')
+def view_video(request_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    item = db.get(Request, request_id)
+    if not item:
+        raise HTTPException(404, 'Solicitação não encontrada')
+    if not _video_access(item, user):
+        db.add(AuditEvent(request_id=request_id, actor_id=user.id, action='VIDEO_VIEW_DENIED'))
+        db.commit()
+        raise HTTPException(403, 'Perfil sem permissão para visualizar vídeo')
+    db.add(AuditEvent(request_id=request_id, actor_id=user.id, action='VIDEO_VIEW_ALLOWED'))
+    db.commit()
+    extraction = db.query(Extraction).filter_by(request_id=request_id).first()
+    return {'request_id': request_id, 'available': bool(extraction), 'storage_reference': extraction.storage_reference if extraction else None}
+
+@app.get('/requests/{request_id}/video/download')
+def download_video(request_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    item = db.get(Request, request_id)
+    if not item:
+        raise HTTPException(404, 'Solicitação não encontrada')
+    if user.role != 'TI':
+        db.add(AuditEvent(request_id=request_id, actor_id=user.id, action='VIDEO_DOWNLOAD_DENIED'))
+        db.commit()
+        raise HTTPException(403, 'Somente TI pode baixar vídeos')
+    db.add(AuditEvent(request_id=request_id, actor_id=user.id, action='VIDEO_DOWNLOAD_ALLOWED'))
+    db.commit()
+    extraction = db.query(Extraction).filter_by(request_id=request_id).first()
+    if not extraction:
+        raise HTTPException(404, 'Vídeo ainda não registrado')
+    return {'request_id': request_id, 'download_allowed': True, 'storage_reference': extraction.storage_reference}
+
 @app.post('/requests/{request_id}/extraction/start', response_model=RequestOut)
 def start_extraction(request_id: int, payload: ExtractionCreate, db: Session = Depends(get_db), user: User = Depends(require_roles('TI')), csrf=Depends(require_csrf)):
-    item = db.get(Request, request_id)
+    item = db.query(Request).with_for_update().filter(Request.id == request_id).first()
     if not item or item.status != 'PRONTA_PARA_EXTRACAO': raise HTTPException(409, 'Extração bloqueada até concluir assinaturas obrigatórias')
-    item.status='EM_EXTRACAO'; db.add(Extraction(request_id=request_id,operator_id=user.id,storage_reference=payload.storage_reference)); db.add(AuditEvent(request_id=request_id,actor_id=user.id,action='EXTRACTION_STARTED')); db.commit(); db.refresh(item); return item
+    item.status='EM_EXTRACAO'; db.add(Extraction(request_id=request_id,operator_id=user.id,storage_reference=payload.storage_reference)); db.add(AuditEvent(request_id=request_id,actor_id=user.id,action='EXTRACTION_STARTED'))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, 'Extração já iniciada')
+    db.refresh(item); return item
 
 @app.post('/requests/{request_id}/extraction/finish', response_model=RequestOut)
 def finish_extraction(request_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles('TI')), csrf=Depends(require_csrf)):

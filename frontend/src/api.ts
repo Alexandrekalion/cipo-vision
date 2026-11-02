@@ -21,4 +21,10 @@ export async function login(username: string, password: string) {
 export function me() { return call<User>('/auth/me') }
 export function listRequests() { return call<RequestItem[]>('/requests') }
 export function createRequest(payload: object) { return call<RequestItem>('/requests', { method: 'POST', body: JSON.stringify(payload) }) }
+export type AuditItem = { id: number; action: string; detail: string; created_at: string }
+export function requestHistory(id: number) { return call<AuditItem[]>(`/requests/${id}/history`) }
+export function signRequest(id: number, purpose: string, documentHash: string) { return call(`/requests/${id}/sign`, { method: 'POST', body: JSON.stringify({ purpose, document_hash: documentHash, confirmed: true }) }) }
+export function decideRequest(id: number, payload: object) { return call<RequestItem>(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify(payload) }) }
+export function startExtraction(id: number, storageReference: string) { return call<RequestItem>(`/requests/${id}/extraction/start`, { method: 'POST', body: JSON.stringify({ storage_reference: storageReference }) }) }
+export function finishExtraction(id: number) { return call<RequestItem>(`/requests/${id}/extraction/finish`, { method: 'POST' }) }
 export async function logout() { await call('/auth/logout', { method: 'POST' }); csrfToken = '' }

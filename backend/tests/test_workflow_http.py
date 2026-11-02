@@ -65,6 +65,14 @@ def test_full_workflow_without_rh_and_extraction_rbac():
     started = ti.post(f"/requests/{request_id}/extraction/start", headers={"X-CSRF-Token":ti_csrf}, json={"storage_reference":"test-only://video"})
     assert started.status_code == 200
     assert ti.post(f"/requests/{request_id}/extraction/finish", headers={"X-CSRF-Token":ti_csrf}).status_code == 200
+    assert manager.get(f"/requests/{request_id}/video").status_code == 200
+    assert requester.get(f"/requests/{request_id}/video").status_code == 403
+    assert requester.get(f"/requests/{request_id}/video/download").status_code == 403
+    assert ti.get(f"/requests/{request_id}/video/download").status_code == 200
+    db = SessionLocal()
+    actions = {event.action for event in db.query(AuditEvent).filter(AuditEvent.request_id == request_id).all()}
+    db.close()
+    assert {'VIDEO_VIEW_ALLOWED', 'VIDEO_VIEW_DENIED', 'VIDEO_DOWNLOAD_DENIED', 'VIDEO_DOWNLOAD_ALLOWED'} <= actions
 
 
 def test_required_csrf_and_rh_conditional_rule():
